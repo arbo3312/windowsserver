@@ -42,20 +42,20 @@ jobs:
 
       - name: Install Tailscale (ARM64)
         run: |
-          # UPDATED: Use the ARM64 installer for the Windows 11 ARM runner
+          # Download ARM64 version
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-arm64.msi"
-          Invoke-WebRequest -Uri $tsUrl -OutFile "ts.msi"
+          Invoke-WebRequest -Uri $tsUrl -OutFile "ts.msi"          
+          # Install quietly
           Start-Process msiexec.exe -ArgumentList "/i", "ts.msi", "/quiet", "/norestart" -Wait
           
-          # Force start the service on ARM
-          net start tailscale
+          # Try to start the service, but DON'T stop if it's already running (ErrorAction)
+          Start-Service -Name "tailscale" -ErrorAction SilentlyContinue
 
       - name: Connect to Tailscale
         run: |
-          # Use the absolute path to avoid "term not recognized" errors
+          Start-Sleep -Seconds 10
           $tsExe = "C:\Program Files\Tailscale\tailscale.exe"
-          if (-not (Test-Path $tsExe)) { $tsExe = "C:\Program Files\Tailscale IPN\tailscale.exe" }
-          
+          if (-not (Test-Path $tsExe)) { $tsExe = "C:\Program Files\Tailscale IPN\tailscale.exe" }          
           & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=usa-win11-vps
           $tsIP = & $tsExe ip -4
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
