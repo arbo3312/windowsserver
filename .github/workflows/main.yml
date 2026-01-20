@@ -1,0 +1,27 @@
+name: Windows Desktop Server
+on: 
+  workflow_dispatch:
+
+jobs:
+  launch-windows:
+    runs-on: windows-latest
+    steps:
+      - name: 1. Set Up Remote Desktop
+        run: |
+          # Enable RDP and allow through firewall
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+
+      - name: 2. Create User Account
+        run: |
+          # Create user 'vncuser' with password 'Password123!'
+          net user vncuser Password123! /add
+          net localgroup administrators vncuser /add
+
+
+      - name: 4. Start Tunnel with Pinggy
+        run: |
+          echo "COPY THE ADDRESS BELOW INTO WINDOWS REMOTE DESKTOP CONNECTION"
+          # RDP uses port 3389 (unlike VNC which uses 5900)
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -t -t -p 443 -R0:localhost:3389 tcp@a.pinggy.io
