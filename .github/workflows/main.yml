@@ -5,8 +5,8 @@ on:
 
 jobs:
   secure-rdp:
-    # Using windows-2019 often forces the job into US-based Azure clusters
-    runs-on: windows-2019
+    # Using windows-latest often forces the job into US-based Azure clusters
+    runs-on: windows-latest
     timeout-minutes: 3600
 
     steps:
