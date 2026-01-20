@@ -35,6 +35,15 @@ jobs:
           echo "RDP_USER=$myUser" >> $env:GITHUB_ENV
           echo "RDP_PASS=$myPass" >> $env:GITHUB_ENV
 
+      - name: Switch to Windows 11 Pro 25H2
+        run: |
+          dism /online /set-edition:Professional /productkey:VK7JG-NPHTM-C97JM-9MPGT-3V66T /norestart /acceptretail
+          $path = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+          Set-ItemProperty -Path $path -Name "ProductName" -Value "Windows 11 Pro"
+          Set-ItemProperty -Path $path -Name "DisplayVersion" -Value "25H2"
+          Set-ItemProperty -Path $path -Name "EditionID" -Value "Professional"  
+          
+
       - name: Verify USA Location
         run: |
           $info = Invoke-RestMethod -Uri http://ip-api.com/json
