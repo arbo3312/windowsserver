@@ -22,6 +22,8 @@ jobs:
 
       - name: 4. Start Tunnel with Pinggy
         run: |
-          echo "COPY THE ADDRESS BELOW INTO WINDOWS REMOTE DESKTOP CONNECTION"
-          # RDP uses port 3389 (unlike VNC which uses 5900)
+          echo "-------------------------------------------------------"
+          echo "WAITING FOR ADDRESS... IF IT DOES NOT SHOW, REFRESH LOGS"
+          echo "-------------------------------------------------------"
+          # Adding 'echo' commands to help Pinggy display the URL
           ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -t -t -p 443 -R0:localhost:3389 tcp@a.pinggy.io
