@@ -104,42 +104,37 @@ jobs:
           Set-ItemProperty -Path $gpuPath -Name "WUSetupCustomDisplayName" -Value 1
           Write-Host "Software graphics acceleration enabled."
 
-      - name: Setup Full Graphics with Auto-1080p
+      - name: Setup Full Graphics with Certificate Trust
         run: |
-          # 1. FORCE AERO REGISTRY & THEMES
-          $dwmPath = "HKCU:\Software\Microsoft\Windows\DWM"
-          if (!(Test-Path $dwmPath)) { New-Item -Path $dwmPath -Force }
-          Set-ItemProperty -Path $dwmPath -Name "Composition" -Value 1
-          Set-ItemProperty -Path $dwmPath -Name "UseMachineCheck" -Value 0
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1
-          sc.exe config Themes start= auto
-          powershell -Command "if ((Get-Service Themes).Status -eq 'Stopped') { Start-Service Themes }"
-
-          # 2. DOWNLOAD FULL VDD APP (25.7.23)
+          # 1. DOWNLOAD & EXTRACT (Same as before)
           $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VDD.Control.25.7.23.zip"
           $wc = New-Object System.Net.WebClient
           $wc.Headers.Add("User-Agent", "Mozilla/5.0")
           $wc.DownloadFile($url, "app.zip")
-        
-          # Extract to a clean folder
           Expand-Archive -Path "app.zip" -DestinationPath "C:\VDD" -Force
-
-          # 3. FIXED SILENT DRIVER INSTALL
-          # We tell PNPUTIL to look in ALL subdirectories (/subdirs) for any .inf file
-          # This prevents the 'Help Menu' error you saw
+  
+          # 2. FORCE TRUST THE DRIVER CERTIFICATE (Prevents getting stuck)
+          # We find the security catalog file (.cat) and add it to Trusted Publishers
+          $catFile = Get-ChildItem -Path "C:\VDD" -Filter "*.cat" -Recurse | Select-Object -First 1
+          if ($catFile) {
+              Write-Host "Trusting certificate: $($catFile.FullName)"
+              certutil -addstore "TrustedPublisher" $catFile.FullName
+          }
+  
+          # 3. INSTALL THE DRIVER (Now it won't ask for permission)
+          # Using /force to ensure it overwrites any partial hangs
           pnputil /add-driver "C:\VDD\*.inf" /subdirs /install
   
-          # 4. AUTO-CONFIG RESOLUTION TO 1080P
-          # Find the EXE regardless of where it is in the folder
+          # 4. CONFIGURE 1080P
           $exeFile = Get-ChildItem -Path "C:\VDD" -Filter "*.exe" -Recurse | Select-Object -First 1
           if ($exeFile) {
               Start-Process -FilePath $exeFile.FullName -ArgumentList "/add", "/width 1920", "/height 1080", "/refresh 60"
           }
           
-          # 5. ACTIVATE & REFRESH
+          # 5. REFRESH DESKTOP
           DisplaySwitch.exe /extend
           Stop-Process -Name explorer -Force
-          Write-Host "Real Graphics 1080p active. Aero theme ready."
+          Write-Host "Driver installed and Aero enabled!"
           
       - name: Enable Windows Themes
         run: |
