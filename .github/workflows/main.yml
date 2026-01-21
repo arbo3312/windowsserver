@@ -60,6 +60,20 @@ jobs:
           $info = Invoke-RestMethod -Uri http://ip-api.com/json
           Write-Host "Server Location: $($info.city), $($info.regionName), $($info.country)"
 
+      - name: Rename PC (Safe Method)
+        run: |
+          $newName = "AcorRolre323"
+          
+          # This line changes the current active session name
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName' -Name "ComputerName" -Value $newName
+          
+          # This line changes the name Windows shows in "Settings"
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName' -Name "ComputerName" -Value $newName
+          
+          # This line changes the name Tailscale and RDP see on the network
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name "Hostname" -Value $newName
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name "NV Hostname" -Value $newName    
+
       - name: Install Tailscale (ARM64)
         run: |
           # Download ARM64 version
