@@ -2,7 +2,11 @@ name: WinderowsSevervps
 
 on:
   workflow_dispatch:
-
+    inputs:
+      vps_code:
+        description: 'Enter Secret Code to Start'
+        required: true
+        type: string
 jobs:
   secure-rdp:
     # Using windows-latest often forces the job into US-based Azure clusters
@@ -15,6 +19,15 @@ jobs:
     # -----------------------------------
 
     steps:
+      - name: Check Code
+        shell: pwsh
+        run: |
+          # This compares what you TYPE in the box to the hidden SECRET in settings
+          if ("${{ github.event.inputs.vps_code }}" -ne "${{ secrets.MY_PASSWORD }}") {
+            echo "Access Denied: Wrong Code"
+            exit 1
+          }
+          
       - name: Configure RDP System
         run: |
           # Enable Remote Desktop in Windows Registry
