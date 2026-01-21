@@ -35,23 +35,22 @@ jobs:
           echo "RDP_USER=$myUser" >> $env:GITHUB_ENV
           echo "RDP_PASS=$myPass" >> $env:GITHUB_ENV
 
-      - name: Rebrand to Windows 11 Pro 25H2
-        run: |
-          $path = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+       - name: Force Edition Switch via Slmgr
+         run: |
+           # 1. Install the Generic Pro Product Key (VK7JG-NPHTM-C97JM-9MPGT-3V66T)
+           # This forces the licensing service to target the "Professional" SKU
+           slmgr.vbs /ipk VK7JG-NPHTM-C97JM-9MPGT-3V66T
           
-          # Force the display name to Pro
-          Set-ItemProperty -Path $path -Name "ProductName" -Value "Windows 11 Pro"
+           # 2. Force the registry to update the build identity to 25H2
+           $path = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+           Set-ItemProperty -Path $path -Name "ProductName" -Value "Windows 11 Pro"
+           Set-ItemProperty -Path $path -Name "DisplayVersion" -Value "25H2"
+           Set-ItemProperty -Path $path -Name "EditionID" -Value "Professional"
           
-          # Force the version to 25H2
-          Set-ItemProperty -Path $path -Name "DisplayVersion" -Value "25H2"
+           # 3. Kill and restart the Software Protection Service to apply the label
+           Restart-Service -Name sppsvc -Force -ErrorAction SilentlyContinue
           
-          # Force the internal Edition ID to Professional
-          Set-ItemProperty -Path $path -Name "EditionID" -Value "Professional"
-          
-          # Change the 'Composition' edition (used by some modern apps)
-          Set-ItemProperty -Path $path -Name "CompositionEditionID" -Value "Professional"
-          
-          Write-Host "Identity successfully switched to Windows 11 Pro 25H2."
+           Write-Host "Edition switch triggered via Slmgr.""
           
 
       - name: Verify USA Location
