@@ -80,39 +80,44 @@ jobs:
           $tsIP = & $tsExe ip -4
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
-      - name: 1. Setup Auto-Login
+      - name: 1. Setup Auto-Login & Firewall
         run: |
-          # Change these to your actual username and password
+          # CHANGE THESE TO YOUR CHOSEN NAME AND PASSWORD
           $myUser = "acorole323"
           $myPass = "A$@sW12Sssw4@ws"
           
+          # Force Firewall to allow RDP (Fixes 0x204 error)
+          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+          
+          # Setup Auto-Login Registry
           $winlogon = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
           Set-ItemProperty -Path $winlogon -Name "AutoAdminLogon" -Value "1"
           Set-ItemProperty -Path $winlogon -Name "DefaultUserName" -Value $user
           Set-ItemProperty -Path $winlogon -Name "DefaultPassword" -Value $pass
-          Write-Host "Auto-login configured for $user."
+          Write-Host "Firewall and Auto-login configured."
 
-      - name: 2. Lock Out GitHub Runner
+      - name: 2. Account Security Takeover
         run: |
-          # Disable the random runner account (e.g., runneradmin_rszdx)
+          # Identify and DISABLE the GitHub runner account (the random name)
           $runnerAccount = Get-LocalUser | Where-Object { $_.Name -like "*runner*" }
           if ($runnerAccount) {
               Disable-LocalUser -Name $runnerAccount.Name -ErrorAction SilentlyContinue
-              Write-Host "GitHub runner account disabled."
+              Write-Host "Runner account locked out. You are now the only user."
           }
 
-      - name: 3. Final Takeover (No-Stuck Version)
+      - name: 3. Final Takeover (Anti-Stuck Version)
         run: |
           # Allow immediate RDP takeover (removes 'Someone else is logged in' prompt)
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fSingleSessionPerUser" -Value 1 -Force          
           
-          # Find the runner session ID
+          # Find the current runner's session ID
           $runnerID = (qwinsta | Where-Object { $_ -match "runner" } | ForEach-Object { ($_.Trim() -split "\s+")[2] })
           
-          # DELAYED LOGOFF: Waits 5 seconds so the script can finish 'Success' in GitHub
+          # THE FIX: Wait 10 seconds before logging off. 
+          # This allows GitHub to finish the script 'successfully' so it doesn't stay 'stuck' or spinning.
           if ($runnerID -match '^\d+$') {
-            Write-Host "Logoff scheduled for runner session $runnerID in 5 seconds..."
-            Start-Process cmd.exe -ArgumentList "/c timeout 5 && logoff $runnerID" -WindowStyle Hidden
+            Write-Host "Success! Connection ready. Closing runner in 10 seconds..."
+            Start-Process cmd.exe -ArgumentList "/c timeout 10 && logoff $runnerID" -WindowStyle Hidden
           }   
 
       - name: Maintain Session
