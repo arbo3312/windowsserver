@@ -104,43 +104,46 @@ jobs:
           Set-ItemProperty -Path $gpuPath -Name "WUSetupCustomDisplayName" -Value 1
           Write-Host "Software graphics acceleration enabled."
 
-      - name: Force Install Graphics Driver (Full App)
+      - name: Absolute Force Graphics Installation
         run: |
-          # 1. DOWNLOAD DEVCON (The Driver Controller Tool)
+          # 1. PREPARE THE REGISTRY FOR AERO
+          $dwmPath = "HKCU:\Software\Microsoft\Windows\DWM"
+          if (!(Test-Path $dwmPath)) { New-Item -Path $dwmPath -Force }
+          Set-ItemProperty -Path $dwmPath -Name "Composition" -Value 1
+          Set-ItemProperty -Path $dwmPath -Name "Blur" -Value 1
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1
+          
+          # 2. DOWNLOAD DEVCON (The Force Tool)
+          # Using a direct link that is script-friendly
           $devconUrl = "https://github.com/upm-ros/windows-devcon/raw/master/x64/devcon.exe"
           Invoke-WebRequest -Uri $devconUrl -OutFile "devcon.exe" -UseBasicParsing
   
-          # 2. DOWNLOAD & EXTRACT VDD (25.7.23)
-          $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VDD.Control.25.7.23.zip"
+          # 3. DOWNLOAD DRIVER (Version 25.7.23 - Using WebClient to bypass 404/Login)
+          $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VirtualDisplayDriver-x86.Driver.Only.zip"
           $wc = New-Object System.Net.WebClient
-          $wc.Headers.Add("User-Agent", "Mozilla/5.0")
-          $wc.DownloadFile($url, "app.zip")
-          Expand-Archive -Path "app.zip" -DestinationPath "C:\VDD" -Force
-  
-          # 3. PRE-TRUST THE CERTIFICATE (Prevent the red security box)
-          $catFile = Get-ChildItem -Path "C:\VDD" -Filter "*.cat" -Recurse | Select-Object -First 1
-          if ($catFile) {
-              certutil -addstore "TrustedPublisher" $catFile.FullName
-          }
-  
-          # 4. STAGE THE DRIVER IN THE STORE
-          $infFile = Get-ChildItem -Path "C:\VDD" -Filter "IddSampleDriver.inf" -Recurse | Select-Object -First 1
-          pnputil /add-driver $infFile.FullName
-  
-          # 5. FORCE INSTALL WITHOUT PERMISSION PROMPTS
-          # We use devcon to "plug in" the virtual hardware manually
-          .\devcon.exe install $infFile.FullName "Root\IddSampleDriver"
-  
-          # 6. CONFIGURE 1080P & AERO
-          $exeFile = Get-ChildItem -Path "C:\VDD" -Filter "*.exe" -Recurse | Select-Object -First 1
-          if ($exeFile) {
-              Start-Process -FilePath $exeFile.FullName -ArgumentList "/add", "/width 1920", "/height 1080", "/refresh 60"
+          $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+          try {
+              $wc.DownloadFile($url, "driver.zip")
+          } catch {
+              Write-Host "Primary failed, trying backup..."
+              Invoke-WebRequest -Uri "https://github.com/itsmikethetech/Virtual-Display-Driver/raw/master/idd_driver.zip" -OutFile "driver.zip" -UseBasicParsing
           }
           
-          # 7. APPLY CHANGES
+          Expand-Archive -Path "driver.zip" -DestinationPath "C:\VDD" -Force
+  
+          # 4. BYPASS THE "STUCK" DRIVER PROMPT
+          # This adds the driver to the internal store WITHOUT trying to install yet
+          $infFile = Get-ChildItem -Path "C:\VDD" -Filter "*.inf" -Recurse | Select-Object -First 1
+          pnputil /add-driver $infFile.FullName
+  
+          # 5. FORCE THE HARDWARE TO EXIST
+          # This 'plugs in' the virtual card so Aero can start
+          .\devcon.exe install $infFile.FullName "Root\IddSampleDriver"
+  
+          # 6. ACTIVATE MONITOR
           DisplaySwitch.exe /extend
           Stop-Process -Name explorer -Force
-          Write-Host "Force Install Successful! Real Graphics are now active."
+          Write-Host "Driver installed and Aero enabled successfully!"
           
       - name: Enable Windows Themes
         run: |
