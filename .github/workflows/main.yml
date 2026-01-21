@@ -85,21 +85,13 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name "Hostname" -Value $newName
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name "NV Hostname" -Value $newName    
 
-      - name: Install Tailscale (ARM64)
+      - name: Install Tailscale (System Mode)
         run: |
-          # Download ARM64 version
+          # Download the ARM64 specific installer
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-arm64.msi"
-          Invoke-WebRequest -Uri $tsUrl -OutFile "ts.msi" -UseBasicParsing
-          
-          # Install quietly
-          Write-Host "Installing Tailscale MSI..."
+          Invoke-WebRequest -Uri $tsUrl -OutFile "ts.msi"
+          # Install as a system-wide service
           Start-Process msiexec.exe -ArgumentList "/i", "ts.msi", "/quiet", "/norestart" -Wait
-          
-          # Ensure service is running
-          Start-Service -Name "tailscale" -ErrorAction SilentlyContinue
-          
-          # Give the service 5 seconds to initialize hardware drivers
-          Start-Sleep -Seconds 5
 
       - name: Enable Software Graphics Acceleration
         run: |
@@ -109,47 +101,7 @@ jobs:
           Set-ItemProperty -Path $gpuPath -Name "WUSetupCustomDisplayName" -Value 1
           Write-Host "Software graphics acceleration enabled."
 
-      - name: Install ARM64 Graphics and Aero
-        run: |
-          # --- DOWNLOAD ---
-          $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VirtualDisplayDriver-ARM64.Driver.Only.zip"
-          $wc = New-Object System.Net.WebClient
-          $wc.Headers.Add("User-Agent", "Mozilla/5.0")
-          $wc.DownloadFile($url, "arm64.zip")
-          Expand-Archive -Path "arm64.zip" -DestinationPath "C:\ARM64Driver" -Force
-  
-          # --- PATH ORIGINS ---
-          # The zip extracts to a folder named "VirtualDisplayDriver"
-          $driverPath = "C:\ARM64Driver\VirtualDisplayDriver"
-          $inf = "$driverPath\MttVDD.inf"
-          $cat = "$driverPath\MttVDD.cat"
-  
-          # --- SECURITY BYPASS ---
-          # Pre-trust the certificate so Windows doesn't ask for permission
-          certutil -addstore "TrustedPublisher" $cat
-          certutil -addstore "Root" $cat
-  
-          # --- NON-BLOCKING INSTALLATION ---
-          # We run pnputil in a background job. If a window pops up, 
-          # the script continues anyway.
-          Write-Host "Initiating Driver Install..."
-          Start-Job -ScriptBlock {
-              param($infFile)
-              pnputil /add-driver $infFile /install /force
-          } -ArgumentList $inf
-  
-          # Wait for the system to process the new hardware
-          Start-Sleep -Seconds 20
-  
-          # --- ENABLE AERO GLASS ---
-          $dwm = "HKCU:\Software\Microsoft\Windows\DWM"
-          Set-ItemProperty -Path $dwm -Name "Composition" -Value 1 -Force
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1 -Force
-          
-          # Trigger display detection
-          DisplaySwitch.exe /extend
-          Stop-Process -Name explorer -Force
-          Write-Host "Graphics setup completed."
+      
           
       - name: Enable Windows Themes
         run: |
@@ -165,26 +117,20 @@ jobs:
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1    
 
-      - name: Connect Tailscale (OAuth)
+      - name: Connect Tailscale (Service Mode)
         run: |
-          # Define the direct path to the executable
-          $tsExe = "C:\Program Files\Tailscale\tailscale.exe"
+          $tsExe = "C:\Windows\System32\config\systemprofile\AppData\Local\Microsoft\WindowsApps\tailscale.exe"
+          if (-not (Test-Path $tsExe)) { $tsExe = "C:\Program Files\Tailscale\tailscale.exe" }
           
-          # 1. Login using OAuth Client ID and Secret from GitHub Secrets
-          Write-Host "Authenticating with OAuth..."
-          & $tsExe login --client-id="${{ secrets.TS_CLIENT_ID }}" --client-secret="${{ secrets.TS_CLIENT_SECRET }}"
+          # Force the service to start and stay alive
+          Set-Service -Name "tailscale" -StartupType Automatic
+          Start-Service -Name "tailscale" -ErrorAction SilentlyContinue
           
-          # 2. Bring the network online
-          # We use --reset to clear any old stuck settings from previous runs
-          Write-Host "Bringing network up..."
-          & $tsExe up --accept-routes --unattended --hostname="ARM64-Windows-VPS" --reset
+          # Connect using --unattended flag (Crucial for RDP)
+          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=usa-win11-vps --accept-routes --unattended
           
-          # 3. Verify and Display IP
-          $tsIP = (& $tsExe ip -4)
-          Write-Host "----------------------------------------------"
-          Write-Host "Tailscale is Online!"
-          Write-Host "Your Static IP is: $tsIP"
-          Write-Host "----------------------------------------------"
+          $tsIP = & $tsExe ip -4
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
       - name: Force Total Access (Mac Fix)
         run: |
