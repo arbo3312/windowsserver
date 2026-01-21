@@ -103,7 +103,7 @@ jobs:
            if (-not (Test-Path $tsExe)) { $tsExe = "C:\Program Files\Tailscale IPN\tailscale.exe" }
     
            # ADDED: --recreate flag to reuse the same identity/IP
-           & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=usa-win11-vps --recreate
+           & $tsExe up --client-id=${{ secrets.TS_OAUTH_CLIENT_ID }} --client-secret=${{ secrets.TS_OAUTH_SECRET }} --hostname=usa-win11-vps --recreate
     
            $tsIP = & $tsExe ip -4
            echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
