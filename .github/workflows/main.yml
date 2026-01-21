@@ -218,13 +218,6 @@ jobs:
           if ($runner) { Disable-LocalUser -Name $runner.Name -ErrorAction SilentlyContinue }
 
           Write-Host "The doors are now wide open. Try connecting now."
-
-      - name: Keep Alive for File Transfer
-        run: |
-          Write-Host "The VPS is now ready. You have 6 hours before it deletes itself."
-          Write-Host "Use this time to transfer your files to your Mac via Shared Folders."
-          # 21600 seconds = 6 hours (The maximum time GitHub allows)
-          Start-Sleep -Seconds 21600
           
       - name: Maintain Session
         run: |
@@ -239,6 +232,12 @@ jobs:
             Write-Host "[$(Get-Date)] Still running Windows 11 ARM..."
             Start-Sleep -Seconds 300
           }
-      
+          
+      - name: Keep Alive for File Transfer
+        run: |
+          Write-Host "The VPS is now ready. You have 6 hours before it deletes itself."
+          Write-Host "Use this time to transfer your files to your Mac via Shared Folders."
+          # 21600 seconds = 6 hours (The maximum time GitHub allows)
+          Start-Sleep -Seconds 21600
 
         
