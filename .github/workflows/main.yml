@@ -104,37 +104,43 @@ jobs:
           Set-ItemProperty -Path $gpuPath -Name "WUSetupCustomDisplayName" -Value 1
           Write-Host "Software graphics acceleration enabled."
 
-      - name: Setup Full Graphics with Certificate Trust
+      - name: Force Install Graphics Driver (Full App)
         run: |
-          # 1. DOWNLOAD & EXTRACT (Same as before)
+          # 1. DOWNLOAD DEVCON (The Driver Controller Tool)
+          $devconUrl = "https://github.com/upm-ros/windows-devcon/raw/master/x64/devcon.exe"
+          Invoke-WebRequest -Uri $devconUrl -OutFile "devcon.exe" -UseBasicParsing
+  
+          # 2. DOWNLOAD & EXTRACT VDD (25.7.23)
           $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VDD.Control.25.7.23.zip"
           $wc = New-Object System.Net.WebClient
           $wc.Headers.Add("User-Agent", "Mozilla/5.0")
           $wc.DownloadFile($url, "app.zip")
           Expand-Archive -Path "app.zip" -DestinationPath "C:\VDD" -Force
   
-          # 2. FORCE TRUST THE DRIVER CERTIFICATE (Prevents getting stuck)
-          # We find the security catalog file (.cat) and add it to Trusted Publishers
+          # 3. PRE-TRUST THE CERTIFICATE (Prevent the red security box)
           $catFile = Get-ChildItem -Path "C:\VDD" -Filter "*.cat" -Recurse | Select-Object -First 1
           if ($catFile) {
-              Write-Host "Trusting certificate: $($catFile.FullName)"
               certutil -addstore "TrustedPublisher" $catFile.FullName
           }
   
-          # 3. INSTALL THE DRIVER (Now it won't ask for permission)
-          # Using /force to ensure it overwrites any partial hangs
-          pnputil /add-driver "C:\VDD\*.inf" /subdirs /install
+          # 4. STAGE THE DRIVER IN THE STORE
+          $infFile = Get-ChildItem -Path "C:\VDD" -Filter "IddSampleDriver.inf" -Recurse | Select-Object -First 1
+          pnputil /add-driver $infFile.FullName
   
-          # 4. CONFIGURE 1080P
+          # 5. FORCE INSTALL WITHOUT PERMISSION PROMPTS
+          # We use devcon to "plug in" the virtual hardware manually
+          .\devcon.exe install $infFile.FullName "Root\IddSampleDriver"
+  
+          # 6. CONFIGURE 1080P & AERO
           $exeFile = Get-ChildItem -Path "C:\VDD" -Filter "*.exe" -Recurse | Select-Object -First 1
           if ($exeFile) {
               Start-Process -FilePath $exeFile.FullName -ArgumentList "/add", "/width 1920", "/height 1080", "/refresh 60"
           }
           
-          # 5. REFRESH DESKTOP
+          # 7. APPLY CHANGES
           DisplaySwitch.exe /extend
           Stop-Process -Name explorer -Force
-          Write-Host "Driver installed and Aero enabled!"
+          Write-Host "Force Install Successful! Real Graphics are now active."
           
       - name: Enable Windows Themes
         run: |
