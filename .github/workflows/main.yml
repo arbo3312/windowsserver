@@ -98,12 +98,16 @@ jobs:
 
       - name: Connect to Tailscale
         run: |
-          Start-Sleep -Seconds 10
-          $tsExe = "C:\Program Files\Tailscale\tailscale.exe"
-          if (-not (Test-Path $tsExe)) { $tsExe = "C:\Program Files\Tailscale IPN\tailscale.exe" }          
-          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=usa-win11-vps
-          $tsIP = & $tsExe ip -4
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+           Start-Sleep -Seconds 10
+           $tsExe = "C:\Program Files\Tailscale\tailscale.exe"
+           if (-not (Test-Path $tsExe)) { $tsExe = "C:\Program Files\Tailscale IPN\tailscale.exe" }
+    
+           # ADDED: --recreate flag to reuse the same identity/IP
+           & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=usa-win11-vps --recreate
+    
+           $tsIP = & $tsExe ip -4
+           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+           Write-Host "Connected! Your Static IP is: $tsIP"
 
       - name: Force Total Access (Mac Fix)
         run: |
@@ -150,3 +154,11 @@ jobs:
             Write-Host "[$(Get-Date)] Still running Windows 11 ARM..."
             Start-Sleep -Seconds 300
           }
+      - name: Keep Alive for File Transfer
+        run: |
+          Write-Host "The VPS is now ready. You have 6 hours before it deletes itself."
+          Write-Host "Use this time to transfer your files to your Mac via Shared Folders."
+          # 21600 seconds = 6 hours (The maximum time GitHub allows)
+          Start-Sleep -Seconds 21600
+
+        
