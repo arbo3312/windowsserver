@@ -80,48 +80,38 @@ jobs:
           $tsIP = & $tsExe ip -4
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
-      - name: 1. Setup Auto-Login & Mac-Friendly Security
+      - name: Force Total Access (Mac Fix)
         run: |
-          # CHANGE THESE TO YOUR CHOSEN NAME AND PASSWORD
           $myUser = "acorole323"
           $myPass = "A$@sW12Sssw4@ws"
+
+          # 1. COMPLETELY DISABLE NLA AND FORCE RDP SECURITY
+          # This is the 'Nuclear Option' for 0x204 errors
+          $tsPath = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
+          Set-ItemProperty -Path $tsPath -Name "UserAuthentication" -Value 0
+          Set-ItemProperty -Path $tsPath -Name "SecurityLayer" -Value 1
+          Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
           
-          # Force SecurityLayer to 1 (RDP Security) and Disable NLA (Fixes 0x204 for Mac)
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 1
-          
-          # Setup Auto-Login Registry
+          # 2. OVERRIDE FIREWALL (Allowing Tailscale specifically)
+          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+          netsh advfirewall firewall add rule name="Allow-RDP-All" dir=in action=allow protocol=TCP localport=3389
+
+          # 3. SET AUTO-LOGIN
           $winlogon = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
           Set-ItemProperty -Path $winlogon -Name "AutoAdminLogon" -Value "1"
           Set-ItemProperty -Path $winlogon -Name "DefaultUserName" -Value $user
           Set-ItemProperty -Path $winlogon -Name "DefaultPassword" -Value $pass
-
-      - name: 2. Firewall & Account Takeover
-        run: |
-          # Force Firewall to allow RDP on all network profiles
-          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
           
-          # Identify and DISABLE the GitHub runner account
-          $runnerAccount = Get-LocalUser | Where-Object { $_.Name -like "*runner*" }
-          if ($runnerAccount) {
-              Disable-LocalUser -Name $runnerAccount.Name -ErrorAction SilentlyContinue
-          }
-
-      - name: 3. Final Service Reset (No-Stuck Version)
-        run: |
-          # Allow immediate RDP takeover
-          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fSingleSessionPerUser" -Value 1 -Force          
-          
-          # Restart RDP Service to apply Mac-friendly settings immediately
+          # 4. RESTART RDP SERVICE
+          # We restart it to make sure it picks up the 'SecurityLayer=1' change
           Restart-Service -Name TermService -Force
           
-          # Find runner session and schedule logoff with 15s delay
-          $runnerID = (qwinsta | Where-Object { $_ -match "runner" } | ForEach-Object { ($_.Trim() -split "\s+")[2] })
-          if ($runnerID -match '^\d+$') {
-            Start-Process cmd.exe -ArgumentList "/c timeout 15 && logoff $runnerID" -WindowStyle Hidden
-          }
-          Write-Host "Success! Connect from your Mac now."
+          # 5. KILL THE RUNNER GENTLY
+          # We disable the runner so it doesn't fight your connection
+          $runner = Get-LocalUser | Where-Object { $_.Name -like "*runner*" }
+          if ($runner) { Disable-LocalUser -Name $runner.Name -ErrorAction SilentlyContinue }
 
+          Write-Host "The doors are now wide open. Try connecting now."
       - name: Maintain Session
         run: |
           Write-Host "`n=========================="
