@@ -114,40 +114,37 @@ jobs:
           Set-ItemProperty -Path $dwmPath -Name "UseMachineCheck" -Value 0
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1
         
-          # Enable Hardware Graphics for Remote Sessions
+          # 2. ENABLE HARDWARE GRAPHICS POLICY
           $tsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
           if (!(Test-Path $tsPath)) { New-Item -Path $tsPath -Force }
           Set-ItemProperty -Path $tsPath -Name "HardwareGraphicsAcceleration" -Value 1
 
-          # 2. START THEMES SERVICE (Safe Start)
+          # 3. START THEMES SERVICE (Safe Start)
           sc.exe config Themes start= auto
           powershell -Command "if ((Get-Service Themes).Status -eq 'Stopped') { Start-Service Themes }"
 
-          # 3. DOWNLOAD VIRTUAL DISPLAY DRIVER (Stable Master Links)
+          # 4. DOWNLOAD VIRTUAL DISPLAY DRIVER (Permanent Direct Link)
+          # Using a direct raw link that bypasses the GitHub login/page check
           $url = "https://raw.githubusercontent.com/itsmikethetech/Virtual-Display-Driver/master/idd_driver.zip"
-          $backupUrl = "https://github.com/itsmikethetech/Virtual-Display-Driver/raw/master/idd_driver.zip"
         
-          try {
-            Write-Host "Attempting primary download..."
-            Invoke-WebRequest -Uri $url -OutFile "driver.zip" -UseBasicParsing -ErrorAction Stop
-          } catch {
-            Write-Host "Primary failed, attempting backup download..."
-            Invoke-WebRequest -Uri $backupUrl -OutFile "driver.zip" -UseBasicParsing
-          }
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $webClient = New-Object System.Net.WebClient
+          $webClient.Headers.Add("User-Agent", "Mozilla/5.0")
+          $webClient.DownloadFile($url, "driver.zip")
         
-           Expand-Archive -Path "driver.zip" -DestinationPath "C:\DisplayDriver" -Force
+          Expand-Archive -Path "driver.zip" -DestinationPath "C:\DisplayDriver" -Force
         
-           # 4. INSTALL THE DRIVER
-           # pnputil adds the driver to the system's hardware list
-           pnputil /add-driver C:\DisplayDriver\IddSampleDriver.inf /install
+          # 5. INSTALL THE DRIVER MANUALLY
+          # We use Pnputil which is the most stable way to inject drivers into a live VPS
+          pnputil /add-driver C:\DisplayDriver\IddSampleDriver.inf /install
         
-           # 5. ACTIVATE THE VIRTUAL MONITOR
-           # This tells Windows to start rendering on the 'Aero-capable' virtual GPU
-           DisplaySwitch.exe /extend
+          # 6. FORCE ACTIVATE THE AERO MONITOR
+          # This triggers the 'Extended' desktop so the virtual GPU starts working
+          DisplaySwitch.exe /extend
         
-           # 6. RESTART EXPLORER
-           Stop-Process -Name explorer -Force
-           Write-Host "Virtual GPU Active. Aero Effects Ready."
+          # 7. RESTART EXPLORER
+          Stop-Process -Name explorer -Force
+          Write-Host "Real Graphics Setup Complete!"
           
       - name: Enable Windows Themes
         run: |
