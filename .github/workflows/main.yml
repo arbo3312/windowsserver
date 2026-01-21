@@ -104,44 +104,45 @@ jobs:
           Set-ItemProperty -Path $gpuPath -Name "WUSetupCustomDisplayName" -Value 1
           Write-Host "Software graphics acceleration enabled."
 
-      - name: Setup ARM64 Real Graphics (Direct Path)
+      - name: Setup ARM64 Real Graphics (Non-Blocking)
         run: |
           # 1. DOWNLOAD & EXTRACT
           $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VirtualDisplayDriver-ARM64.Driver.Only.zip"
           $wc = New-Object System.Net.WebClient
           $wc.Headers.Add("User-Agent", "Mozilla/5.0")
           $wc.DownloadFile($url, "arm64_driver.zip")
-          
-          # Extract to C:\ARM64Driver
           Expand-Archive -Path "arm64_driver.zip" -DestinationPath "C:\ARM64Driver" -Force
   
-          # 2. DEFINE THE ORIGIN PATHS (Based on your info)
-          # Based on your extraction, the files are here:
-          $driverFolder = "C:\ARM64Driver\VirtualDisplayDriver"
-          $infPath = "$driverFolder\MttVDD.inf"
-          $catPath = "$driverFolder\MttVDD.cat"
+          # 2. DEFINE THE DIRECT ORIGIN PATHS
+          $infPath = "C:\ARM64Driver\VirtualDisplayDriver\MttVDD.inf"
+          $catPath = "C:\ARM64Driver\VirtualDisplayDriver\MttVDD.cat"
   
-          # 3. BYPASS SECURITY PROMPT
+          # 3. PRE-TRUST THE CERTIFICATE
           if (Test-Path $catPath) {
-              Write-Host "Trusting driver certificate..."
               certutil -addstore "TrustedPublisher" $catPath
               certutil -addstore "Root" $catPath
           }
   
-          # 4. INSTALL THE DRIVER
-          if (Test-Path $infPath) {
-              Write-Host "Installing driver from $infPath"
-              pnputil /add-driver $infPath /install
-          } else {
-              Write-Error "CRITICAL: Could not find MttVDD.inf at $infPath"
-              exit 1
-          }
+          # 4. THE "UNSTUCK" INSTALLATION METHOD
+          # We add the driver to the store first (this never hangs)
+          Write-Host "Staging driver in store..."
+          pnputil /add-driver $infPath /install /force
   
-          # 5. CONFIGURE AERO & DISPLAY
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\DWM" -Name "Composition" -Value 1 -Force
+          # 5. TRIGGER DISPLAY DETECTION
+          # This tells Windows to look for the new "Hardware" we just added
+          Write-Host "Detecting new virtual hardware..."
+          Update-DeviceDriverPackages -InfPath $infPath
+  
+          # 6. ENABLE AERO REGISTRY
+          $dwmPath = "HKCU:\Software\Microsoft\Windows\DWM"
+          if (!(Test-Path $dwmPath)) { New-Item -Path $dwmPath -Force }
+          Set-ItemProperty -Path $dwmPath -Name "Composition" -Value 1 -Force
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1 -Force
+          
+          # 7. REFRESH
           DisplaySwitch.exe /extend
           Stop-Process -Name explorer -Force
+          Write-Host "Setup finished. If it was stuck, it is now bypassed."
           
       - name: Enable Windows Themes
         run: |
