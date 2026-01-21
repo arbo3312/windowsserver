@@ -114,17 +114,25 @@ jobs:
           Set-ItemProperty -Path $dwmPath -Name "UseMachineCheck" -Value 0
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1
         
-          # 2. DOWNLOAD UPDATED VIRTUAL DISPLAY DRIVER
-          # Using the latest stable version link
-          $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/24.10.27-beta/VirtualDisplayDriver-x86.Driver.Only.zip"
-          Invoke-WebRequest -Uri $url -OutFile "driver.zip" -UseBasicParsing
-          Expand-Archive -Path "driver.zip" -DestinationPath "C:\DisplayDriver" -Force
+          # Enable Hardware Graphics for Remote Sessions
+          $tsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          if (!(Test-Path $tsPath)) { New-Item -Path $tsPath -Force }
+          Set-ItemProperty -Path $tsPath -Name "HardwareGraphicsAcceleration" -Value 1
+
+          # 2. START THEMES SERVICE (Safe Start)
+          sc.exe config Themes start= auto
+          powershell -Command "if ((Get-Service Themes).Status -eq 'Stopped') { Start-Service Themes }"
+
+          # 3. DOWNLOAD VIRTUAL DISPLAY DRIVER (Fixed URL)
+          # This link redirects to the latest stable release automatically
+          $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/latest/download/Virtual.Display.Driver.v1.0.1-setup-x64.exe"
+          Invoke-WebRequest -Uri $url -OutFile "driver_installer.exe" -UseBasicParsing
         
-          # 3. INSTALL THE DRIVER
-          # We use pnputil to add the driver to the system's driver store
-          pnputil /add-driver C:\DisplayDriver\IddSampleDriver.inf /install
+          # 4. SILENT INSTALLATION
+          # We run the installer in silent mode (/S)
+          Start-Process -FilePath ".\driver_installer.exe" -ArgumentList "/S" -Wait
         
-          # 4. RESTART EXPLORER TO APPLY
+          # 5. APPLY CHANGES
           Stop-Process -Name explorer -Force
           Write-Host "Virtual GPU Active & Aero Effects Forced."
           
