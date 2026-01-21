@@ -104,13 +104,48 @@ jobs:
           Set-ItemProperty -Path $gpuPath -Name "WUSetupCustomDisplayName" -Value 1
           Write-Host "Software graphics acceleration enabled."
 
+      - name: Setup Real Graphics and Virtual Display
+        run: |
+          # 1. FORCE AERO & TRANSPARENCY REGISTRY
+          $dwmPath = "HKCU:\Software\Microsoft\Windows\DWM"
+          if (!(Test-Path $dwmPath)) { New-Item -Path $dwmPath -Force }
+          Set-ItemProperty -Path $dwmPath -Name "Composition" -Value 1
+          Set-ItemProperty -Path $dwmPath -Name "Blur" -Value 1
+          Set-ItemProperty -Path $dwmPath -Name "UseMachineCheck" -Value 0
+        
+          # Enable Global Transparency Toggle
+          $persPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+          Set-ItemProperty -Path $persPath -Name "EnableTransparency" -Value 1
+        
+          # Enable Hardware Graphics for RDP
+          $tsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          if (!(Test-Path $tsPath)) { New-Item -Path $tsPath -Force }
+          Set-ItemProperty -Path $tsPath -Name "HardwareGraphicsAcceleration" -Value 1
+
+          # 2. INSTALL VIRTUAL DISPLAY DRIVER
+          Invoke-WebRequest -Uri "https://github.com/itsmikethetech/Virtual-Display-Driver/releases/download/2.0/idd_driver.zip" -OutFile "driver.zip"
+          Expand-Archive -Path "driver.zip" -DestinationPath "C:\DisplayDriver" -Force
+        
+          # Silent Driver Installation using PnPUtil (More reliable than nefcon for scripts)
+          pnputil /add-driver C:\DisplayDriver\IddSampleDriver.inf /install
+        
+          # 3. APPLY CHANGES
+          Stop-Process -Name explorer -Force
+          Write-Host "Virtual GPU Active & Aero Effects Forced."    
+
       - name: Enable Windows Themes
         run: |
+          # Set the service to automatic
           sc.exe config Themes start= auto
-          net start Themes
-          # Also enable the 'Desktop Experience' feel
+          
+          # Start the service only if it is stopped
+          # This prevents the "Exit Code 1" crash
+          powershell -Command "if ((Get-Service Themes).Status -eq 'Stopped') { Start-Service Themes }"
+          
+          # Force Dark Mode/Transparency settings
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0    
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1    
 
       - name: Connect to Tailscale
         run: |
