@@ -160,7 +160,7 @@ jobs:
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1    
 
-      - name: Step 1: Connect Tailscale (OAuth)
+      - name:  Connect Tailscale (OAuth)
         run: |
           # Login using your permanent OAuth Client ID and Secret
           Write-Host "Logging into Tailscale..."
