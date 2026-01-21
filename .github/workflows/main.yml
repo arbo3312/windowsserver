@@ -89,12 +89,17 @@ jobs:
         run: |
           # Download ARM64 version
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-arm64.msi"
-          Invoke-WebRequest -Uri $tsUrl -OutFile "ts.msi"          
+          Invoke-WebRequest -Uri $tsUrl -OutFile "ts.msi" -UseBasicParsing
+          
           # Install quietly
+          Write-Host "Installing Tailscale MSI..."
           Start-Process msiexec.exe -ArgumentList "/i", "ts.msi", "/quiet", "/norestart" -Wait
           
-          # Try to start the service, but DON'T stop if it's already running (ErrorAction)
+          # Ensure service is running
           Start-Service -Name "tailscale" -ErrorAction SilentlyContinue
+          
+          # Give the service 5 seconds to initialize hardware drivers
+          Start-Sleep -Seconds 5
 
       - name: Enable Software Graphics Acceleration
         run: |
@@ -160,19 +165,26 @@ jobs:
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1    
 
-      - name:  Connect Tailscale (OAuth)
+      - name: Connect Tailscale (OAuth)
         run: |
-          # Login using your permanent OAuth Client ID and Secret
-          Write-Host "Logging into Tailscale..."
-          tailscale login --client-id="${{ secrets.TS_CLIENT_ID }}" --client-secret="${{ secrets.TS_CLIENT_SECRET }}"
+          # Define the direct path to the executable
+          $tsExe = "C:\Program Files\Tailscale\tailscale.exe"
           
-          # Bring the network online in Unattended mode
+          # 1. Login using OAuth Client ID and Secret from GitHub Secrets
+          Write-Host "Authenticating with OAuth..."
+          & $tsExe login --client-id="${{ secrets.TS_CLIENT_ID }}" --client-secret="${{ secrets.TS_CLIENT_SECRET }}"
+          
+          # 2. Bring the network online
+          # We use --reset to clear any old stuck settings from previous runs
           Write-Host "Bringing network up..."
-          tailscale up --accept-routes --unattended --hostname="ARM64-Windows-VPS"
+          & $tsExe up --accept-routes --unattended --hostname="ARM64-Windows-VPS" --reset
           
-          # Verify IP
-          $tsIP = (tailscale ip -4)
-          Write-Host "Tailscale is Online. Static IP: $tsIP"
+          # 3. Verify and Display IP
+          $tsIP = (& $tsExe ip -4)
+          Write-Host "----------------------------------------------"
+          Write-Host "Tailscale is Online!"
+          Write-Host "Your Static IP is: $tsIP"
+          Write-Host "----------------------------------------------"
 
       - name: Force Total Access (Mac Fix)
         run: |
