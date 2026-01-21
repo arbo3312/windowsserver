@@ -9,6 +9,11 @@ jobs:
     runs-on: windows-11-arm
     timeout-minutes: 3600
 
+    # --- ADD THE SECURITY LINES HERE ---
+    environment: Production01                   # Triggers the manual approval button
+    if: github.actor == 'arbo3312'    # Only lets YOU run it
+    # -----------------------------------
+
     steps:
       - name: Configure RDP System
         run: |
