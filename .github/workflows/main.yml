@@ -96,6 +96,22 @@ jobs:
           # Try to start the service, but DON'T stop if it's already running (ErrorAction)
           Start-Service -Name "tailscale" -ErrorAction SilentlyContinue
 
+      - name: Enable Software Graphics Acceleration
+        run: |
+          $gpuPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          if (!(Test-Path $gpuPath)) { New-Item -Path $gpuPath -Force }
+          Set-ItemProperty -Path $gpuPath -Name "HardwareGraphicsAcceleration" -Value 1
+          Set-ItemProperty -Path $gpuPath -Name "WUSetupCustomDisplayName" -Value 1
+          Write-Host "Software graphics acceleration enabled."
+
+      - name: Enable Windows Themes
+        run: |
+          sc.exe config Themes start= auto
+          net start Themes
+          # Also enable the 'Desktop Experience' feel
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0    
+
       - name: Connect to Tailscale
         run: |
            Start-Sleep -Seconds 10
