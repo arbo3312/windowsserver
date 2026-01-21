@@ -80,6 +80,27 @@ jobs:
           $tsIP = & $tsExe ip -4
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
+      - name: Prepare Session for My Login
+        run: |
+          # 1. Allow immediate RDP takeover
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fSingleSessionPerUser" -Value 1 -Force          
+          # 2. Log off any existing runner sessions (handles random names like runneradmin_rszdx)
+          qwinsta | Where-Object { $_ -match "runner" } | ForEach-Object {
+            $sessionId = ($_.Trim() -split "\s+")[2]
+            if ($sessionId -match '^\d+$') { logoff $sessionId }
+          }
+          Write-Host "Background sessions cleared."
+
+      - name: Exclusive Admin Takeover
+        run: |
+          # 3. Find and DISABLE the specific GitHub runner account so it cannot re-login
+          $runnerAccount = Get-LocalUser | Where-Object { $_.Name -like "*runner*" }
+          if ($runnerAccount) {
+              Disable-LocalUser -Name $runnerAccount.Name
+              Write-Host "Locked out account: $($runnerAccount.Name)"
+          }
+          Write-Host "You are now the exclusive owner of this Windows 11 Pro session."   
+
       - name: Maintain Session
         run: |
           Write-Host "`n=========================="
