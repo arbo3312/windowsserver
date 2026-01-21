@@ -112,27 +112,22 @@ jobs:
           Set-ItemProperty -Path $dwmPath -Name "Composition" -Value 1
           Set-ItemProperty -Path $dwmPath -Name "Blur" -Value 1
           Set-ItemProperty -Path $dwmPath -Name "UseMachineCheck" -Value 0
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1
         
-          # Enable Global Transparency Toggle
-          $persPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-          Set-ItemProperty -Path $persPath -Name "EnableTransparency" -Value 1
-        
-          # Enable Hardware Graphics for RDP
-          $tsPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
-          if (!(Test-Path $tsPath)) { New-Item -Path $tsPath -Force }
-          Set-ItemProperty -Path $tsPath -Name "HardwareGraphicsAcceleration" -Value 1
-
-          # 2. INSTALL VIRTUAL DISPLAY DRIVER
-          Invoke-WebRequest -Uri "https://github.com/itsmikethetech/Virtual-Display-Driver/releases/download/2.0/idd_driver.zip" -OutFile "driver.zip"
+          # 2. DOWNLOAD UPDATED VIRTUAL DISPLAY DRIVER
+          # Using the latest stable version link
+          $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/24.10.27-beta/VirtualDisplayDriver-x86.Driver.Only.zip"
+          Invoke-WebRequest -Uri $url -OutFile "driver.zip" -UseBasicParsing
           Expand-Archive -Path "driver.zip" -DestinationPath "C:\DisplayDriver" -Force
         
-          # Silent Driver Installation using PnPUtil (More reliable than nefcon for scripts)
+          # 3. INSTALL THE DRIVER
+          # We use pnputil to add the driver to the system's driver store
           pnputil /add-driver C:\DisplayDriver\IddSampleDriver.inf /install
         
-          # 3. APPLY CHANGES
+          # 4. RESTART EXPLORER TO APPLY
           Stop-Process -Name explorer -Force
-          Write-Host "Virtual GPU Active & Aero Effects Forced."    
-
+          Write-Host "Virtual GPU Active & Aero Effects Forced."
+          
       - name: Enable Windows Themes
         run: |
           # Set the service to automatic
