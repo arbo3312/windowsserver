@@ -120,17 +120,22 @@ jobs:
           $wc = New-Object System.Net.WebClient
           $wc.Headers.Add("User-Agent", "Mozilla/5.0")
           $wc.DownloadFile($url, "app.zip")
+        
+          # Extract to a clean folder
           Expand-Archive -Path "app.zip" -DestinationPath "C:\VDD" -Force
 
-          # 3. SILENT DRIVER INSTALL
-          $infFile = Get-ChildItem -Path "C:\VDD" -Filter "IddSampleDriver.inf" -Recurse | Select-Object -First 1
-          pnputil /add-driver $infFile.FullName /install
-
+          # 3. FIXED SILENT DRIVER INSTALL
+          # We tell PNPUTIL to look in ALL subdirectories (/subdirs) for any .inf file
+          # This prevents the 'Help Menu' error you saw
+          pnputil /add-driver "C:\VDD\*.inf" /subdirs /install
+  
           # 4. AUTO-CONFIG RESOLUTION TO 1080P
-          # We run the Control App with arguments to add a 1920x1080 display immediately
+          # Find the EXE regardless of where it is in the folder
           $exeFile = Get-ChildItem -Path "C:\VDD" -Filter "*.exe" -Recurse | Select-Object -First 1
-          Start-Process -FilePath $exeFile.FullName -ArgumentList "/add", "/width 1920", "/height 1080", "/refresh 60"
-        
+          if ($exeFile) {
+              Start-Process -FilePath $exeFile.FullName -ArgumentList "/add", "/width 1920", "/height 1080", "/refresh 60"
+          }
+          
           # 5. ACTIVATE & REFRESH
           DisplaySwitch.exe /extend
           Stop-Process -Name explorer -Force
