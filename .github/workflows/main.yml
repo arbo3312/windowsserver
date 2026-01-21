@@ -80,55 +80,40 @@ jobs:
           $tsIP = & $tsExe ip -4
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
-      - name: Prepare Session for My Login
+      - name: 1. Setup Auto-Login
         run: |
-          # 1. Allow immediate RDP takeover
-          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fSingleSessionPerUser" -Value 1 -Force          
-          # 2. Log off any existing runner sessions (handles random names like runneradmin_rszdx)
-          qwinsta | Where-Object { $_ -match "runner" } | ForEach-Object {
-            $sessionId = ($_.Trim() -split "\s+")[2]
-            if ($sessionId -match '^\d+$') { logoff $sessionId }
-          }
-          Write-Host "Background sessions cleared."
-
-      - name: Configure Auto-Login and Exclusive Access
-        run: |
-          # 1. Set your specific username and password here
+          # Change these to your actual username and password
           $myUser = "acorole323"
           $myPass = "A$@sW12Sssw4@ws"
-
-          # 2. Configure Windows to Auto-Login as YOU
+          
           $winlogon = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
           Set-ItemProperty -Path $winlogon -Name "AutoAdminLogon" -Value "1"
           Set-ItemProperty -Path $winlogon -Name "DefaultUserName" -Value $user
           Set-ItemProperty -Path $winlogon -Name "DefaultPassword" -Value $pass
-          
-          # 3. Allow immediate RDP takeover (No "Someone else is logged in" prompt)
-          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fSingleSessionPerUser" -Value 1 -Force          
+          Write-Host "Auto-login configured for $user."
 
-          # 4. Kick the GitHub runner (the random name like runneradmin_rszdx)
-          qwinsta | Where-Object { $_ -match "runner" } | ForEach-Object {
-            $sessionId = ($_.Trim() -split "\s+")[2]
-            if ($sessionId -match '^\d+$') { logoff $sessionId }
-          }
-
-          # 5. Lock out the GitHub runner account permanently
-          $runnerAccount = Get-LocalUser | Where-Object { $_.Name -like "*runner*" }
-          if ($runnerAccount) {
-              Disable-LocalUser -Name $runnerAccount.Name
-          }
-          
-          Write-Host "Auto-login set for $user. GitHub runner disabled."    
-
-      - name: Exclusive Admin Takeover
+      - name: 2. Lock Out GitHub Runner
         run: |
-          # 3. Find and DISABLE the specific GitHub runner account so it cannot re-login
+          # Disable the random runner account (e.g., runneradmin_rszdx)
           $runnerAccount = Get-LocalUser | Where-Object { $_.Name -like "*runner*" }
           if ($runnerAccount) {
-              Disable-LocalUser -Name $runnerAccount.Name
-              Write-Host "Locked out account: $($runnerAccount.Name)"
+              Disable-LocalUser -Name $runnerAccount.Name -ErrorAction SilentlyContinue
+              Write-Host "GitHub runner account disabled."
           }
-          Write-Host "You are now the exclusive owner of this Windows 11 Pro session."   
+
+      - name: 3. Final Takeover (No-Stuck Version)
+        run: |
+          # Allow immediate RDP takeover (removes 'Someone else is logged in' prompt)
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fSingleSessionPerUser" -Value 1 -Force          
+          
+          # Find the runner session ID
+          $runnerID = (qwinsta | Where-Object { $_ -match "runner" } | ForEach-Object { ($_.Trim() -split "\s+")[2] })
+          
+          # DELAYED LOGOFF: Waits 5 seconds so the script can finish 'Success' in GitHub
+          if ($runnerID -match '^\d+$') {
+            Write-Host "Logoff scheduled for runner session $runnerID in 5 seconds..."
+            Start-Process cmd.exe -ArgumentList "/c timeout 5 && logoff $runnerID" -WindowStyle Hidden
+          }   
 
       - name: Maintain Session
         run: |
