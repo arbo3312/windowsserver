@@ -104,46 +104,47 @@ jobs:
           Set-ItemProperty -Path $gpuPath -Name "WUSetupCustomDisplayName" -Value 1
           Write-Host "Software graphics acceleration enabled."
 
-      - name: Absolute Force Graphics Installation
+      - name: Setup ARM64 Real Graphics (Bypass Prompts)
         run: |
-          # 1. PREPARE THE REGISTRY FOR AERO
+          # 1. PRE-CONFIGURE AERO & THEMES
           $dwmPath = "HKCU:\Software\Microsoft\Windows\DWM"
           if (!(Test-Path $dwmPath)) { New-Item -Path $dwmPath -Force }
           Set-ItemProperty -Path $dwmPath -Name "Composition" -Value 1
           Set-ItemProperty -Path $dwmPath -Name "Blur" -Value 1
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1
           
-          # 2. DOWNLOAD DEVCON (The Force Tool)
-          # Using a direct link that is script-friendly
-          $devconUrl = "https://github.com/upm-ros/windows-devcon/raw/master/x64/devcon.exe"
-          Invoke-WebRequest -Uri $devconUrl -OutFile "devcon.exe" -UseBasicParsing
+          # Start Themes Service
+          sc.exe config Themes start= auto
+          powershell -Command "if ((Get-Service Themes).Status -eq 'Stopped') { Start-Service Themes }"
   
-          # 3. DOWNLOAD DRIVER (Version 25.7.23 - Using WebClient to bypass 404/Login)
-          $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VirtualDisplayDriver-x86.Driver.Only.zip"
+          # 2. DOWNLOAD ARM64 DRIVER
+          $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VirtualDisplayDriver-ARM64.Driver.Only.zip"
           $wc = New-Object System.Net.WebClient
-          $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-          try {
-              $wc.DownloadFile($url, "driver.zip")
-          } catch {
-              Write-Host "Primary failed, trying backup..."
-              Invoke-WebRequest -Uri "https://github.com/itsmikethetech/Virtual-Display-Driver/raw/master/idd_driver.zip" -OutFile "driver.zip" -UseBasicParsing
+          $wc.Headers.Add("User-Agent", "Mozilla/5.0")
+          $wc.DownloadFile($url, "arm64_driver.zip")
+          Expand-Archive -Path "arm64_driver.zip" -DestinationPath "C:\ARM64Driver" -Force
+  
+          # 3. BYPASS SECURITY (The "Yes/No" Fix)
+          # We find the security catalog file (.cat) and add it to the Trusted Publishers store.
+          # This tells Windows: "I trust this developer, don't ask me again."
+          $catFile = Get-ChildItem -Path "C:\ARM64Driver" -Filter "*.cat" -Recurse | Select-Object -First 1
+          if ($catFile) {
+              Write-Host "Bypassing security prompt for: $($catFile.Name)"
+              certutil -addstore "TrustedPublisher" $catFile.FullName
+              certutil -addstore "Root" $catFile.FullName
           }
-          
-          Expand-Archive -Path "driver.zip" -DestinationPath "C:\VDD" -Force
   
-          # 4. BYPASS THE "STUCK" DRIVER PROMPT
-          # This adds the driver to the internal store WITHOUT trying to install yet
-          $infFile = Get-ChildItem -Path "C:\VDD" -Filter "*.inf" -Recurse | Select-Object -First 1
-          pnputil /add-driver $infFile.FullName
+          # 4. INSTALL DRIVER
+          # /install tells Windows to activate it immediately
+          # /add-driver adds it to the system store
+          pnputil /add-driver "C:\ARM64Driver\*.inf" /install
   
-          # 5. FORCE THE HARDWARE TO EXIST
-          # This 'plugs in' the virtual card so Aero can start
-          .\devcon.exe install $infFile.FullName "Root\IddSampleDriver"
-  
-          # 6. ACTIVATE MONITOR
+          # 5. ENABLE DISPLAY & REFRESH
           DisplaySwitch.exe /extend
+          
+          # Restart Explorer to apply the "Glass" Aero effect
           Stop-Process -Name explorer -Force
-          Write-Host "Driver installed and Aero enabled successfully!"
+          Write-Host "ARM64 Graphics and Aero are now enabled!"
           
       - name: Enable Windows Themes
         run: |
