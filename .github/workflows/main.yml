@@ -119,25 +119,35 @@ jobs:
           if (!(Test-Path $tsPath)) { New-Item -Path $tsPath -Force }
           Set-ItemProperty -Path $tsPath -Name "HardwareGraphicsAcceleration" -Value 1
 
-          # 2. START THEMES SERVICE
+          # 2. START THEMES SERVICE (Safe Start)
           sc.exe config Themes start= auto
           powershell -Command "if ((Get-Service Themes).Status -eq 'Stopped') { Start-Service Themes }"
 
-          # 3. DOWNLOAD & INSTALL VIRTUAL DISPLAY DRIVER
-          $url = "https://github.com/itsmikethetech/Virtual-Display-Driver/releases/download/2.0/idd_driver.zip"
-          Invoke-WebRequest -Uri $url -OutFile "driver.zip" -UseBasicParsing
-          Expand-Archive -Path "driver.zip" -DestinationPath "C:\DisplayDriver" -Force
+          # 3. DOWNLOAD VIRTUAL DISPLAY DRIVER (Stable Master Links)
+          $url = "https://raw.githubusercontent.com/itsmikethetech/Virtual-Display-Driver/master/idd_driver.zip"
+          $backupUrl = "https://github.com/itsmikethetech/Virtual-Display-Driver/raw/master/idd_driver.zip"
         
-          # Add driver to the system
-          pnputil /add-driver C:\DisplayDriver\IddSampleDriver.inf /install
+          try {
+            Write-Host "Attempting primary download..."
+            Invoke-WebRequest -Uri $url -OutFile "driver.zip" -UseBasicParsing -ErrorAction Stop
+          } catch {
+            Write-Host "Primary failed, attempting backup download..."
+            Invoke-WebRequest -Uri $backupUrl -OutFile "driver.zip" -UseBasicParsing
+          }
         
-          # 4. FORCE SYSTEM TO USE THE VIRTUAL MONITOR (The "Aero" Monitor)
-          # We use a built-in Windows command to extend the display to the virtual GPU
-          DisplaySwitch.exe /extend
+           Expand-Archive -Path "driver.zip" -DestinationPath "C:\DisplayDriver" -Force
         
-          # 5. RESTART EXPLORER & FINISH
-          Stop-Process -Name explorer -Force
-          Write-Host "Virtual GPU Active. System set to Extend Mode for Aero support."
+           # 4. INSTALL THE DRIVER
+           # pnputil adds the driver to the system's hardware list
+           pnputil /add-driver C:\DisplayDriver\IddSampleDriver.inf /install
+        
+           # 5. ACTIVATE THE VIRTUAL MONITOR
+           # This tells Windows to start rendering on the 'Aero-capable' virtual GPU
+           DisplaySwitch.exe /extend
+        
+           # 6. RESTART EXPLORER
+           Stop-Process -Name explorer -Force
+           Write-Host "Virtual GPU Active. Aero Effects Ready."
           
       - name: Enable Windows Themes
         run: |
