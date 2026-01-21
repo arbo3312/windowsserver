@@ -119,22 +119,25 @@ jobs:
           if (!(Test-Path $tsPath)) { New-Item -Path $tsPath -Force }
           Set-ItemProperty -Path $tsPath -Name "HardwareGraphicsAcceleration" -Value 1
 
-          # 2. START THEMES SERVICE (Safe Start)
+          # 2. START THEMES SERVICE
           sc.exe config Themes start= auto
           powershell -Command "if ((Get-Service Themes).Status -eq 'Stopped') { Start-Service Themes }"
 
-          # 3. DOWNLOAD VIRTUAL DISPLAY DRIVER (Fixed URL)
-          # This link redirects to the latest stable release automatically
-          $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/latest/download/Virtual.Display.Driver.v1.0.1-setup-x64.exe"
-          Invoke-WebRequest -Uri $url -OutFile "driver_installer.exe" -UseBasicParsing
+          # 3. DOWNLOAD & INSTALL VIRTUAL DISPLAY DRIVER
+          $url = "https://github.com/itsmikethetech/Virtual-Display-Driver/releases/download/2.0/idd_driver.zip"
+          Invoke-WebRequest -Uri $url -OutFile "driver.zip" -UseBasicParsing
+          Expand-Archive -Path "driver.zip" -DestinationPath "C:\DisplayDriver" -Force
         
-          # 4. SILENT INSTALLATION
-          # We run the installer in silent mode (/S)
-          Start-Process -FilePath ".\driver_installer.exe" -ArgumentList "/S" -Wait
+          # Add driver to the system
+          pnputil /add-driver C:\DisplayDriver\IddSampleDriver.inf /install
         
-          # 5. APPLY CHANGES
+          # 4. FORCE SYSTEM TO USE THE VIRTUAL MONITOR (The "Aero" Monitor)
+          # We use a built-in Windows command to extend the display to the virtual GPU
+          DisplaySwitch.exe /extend
+        
+          # 5. RESTART EXPLORER & FINISH
           Stop-Process -Name explorer -Force
-          Write-Host "Virtual GPU Active & Aero Effects Forced."
+          Write-Host "Virtual GPU Active. System set to Extend Mode for Aero support."
           
       - name: Enable Windows Themes
         run: |
