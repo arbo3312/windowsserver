@@ -104,47 +104,44 @@ jobs:
           Set-ItemProperty -Path $gpuPath -Name "WUSetupCustomDisplayName" -Value 1
           Write-Host "Software graphics acceleration enabled."
 
-      - name: Setup ARM64 Real Graphics (Bypass Prompts)
+      - name: Setup ARM64 Real Graphics (Direct Path)
         run: |
-          # 1. PRE-CONFIGURE AERO & THEMES
-          $dwmPath = "HKCU:\Software\Microsoft\Windows\DWM"
-          if (!(Test-Path $dwmPath)) { New-Item -Path $dwmPath -Force }
-          Set-ItemProperty -Path $dwmPath -Name "Composition" -Value 1
-          Set-ItemProperty -Path $dwmPath -Name "Blur" -Value 1
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1
-          
-          # Start Themes Service
-          sc.exe config Themes start= auto
-          powershell -Command "if ((Get-Service Themes).Status -eq 'Stopped') { Start-Service Themes }"
-  
-          # 2. DOWNLOAD ARM64 DRIVER
+          # 1. DOWNLOAD & EXTRACT
           $url = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VirtualDisplayDriver-ARM64.Driver.Only.zip"
           $wc = New-Object System.Net.WebClient
           $wc.Headers.Add("User-Agent", "Mozilla/5.0")
           $wc.DownloadFile($url, "arm64_driver.zip")
+          
+          # Extract to C:\ARM64Driver
           Expand-Archive -Path "arm64_driver.zip" -DestinationPath "C:\ARM64Driver" -Force
   
-          # 3. BYPASS SECURITY (The "Yes/No" Fix)
-          # We find the security catalog file (.cat) and add it to the Trusted Publishers store.
-          # This tells Windows: "I trust this developer, don't ask me again."
-          $catFile = Get-ChildItem -Path "C:\ARM64Driver" -Filter "*.cat" -Recurse | Select-Object -First 1
-          if ($catFile) {
-              Write-Host "Bypassing security prompt for: $($catFile.Name)"
-              certutil -addstore "TrustedPublisher" $catFile.FullName
-              certutil -addstore "Root" $catFile.FullName
+          # 2. DEFINE THE ORIGIN PATHS (Based on your info)
+          # Based on your extraction, the files are here:
+          $driverFolder = "C:\ARM64Driver\VirtualDisplayDriver"
+          $infPath = "$driverFolder\MttVDD.inf"
+          $catPath = "$driverFolder\MttVDD.cat"
+  
+          # 3. BYPASS SECURITY PROMPT
+          if (Test-Path $catPath) {
+              Write-Host "Trusting driver certificate..."
+              certutil -addstore "TrustedPublisher" $catPath
+              certutil -addstore "Root" $catPath
           }
   
-          # 4. INSTALL DRIVER
-          # /install tells Windows to activate it immediately
-          # /add-driver adds it to the system store
-          pnputil /add-driver "C:\ARM64Driver\*.inf" /install
+          # 4. INSTALL THE DRIVER
+          if (Test-Path $infPath) {
+              Write-Host "Installing driver from $infPath"
+              pnputil /add-driver $infPath /install
+          } else {
+              Write-Error "CRITICAL: Could not find MttVDD.inf at $infPath"
+              exit 1
+          }
   
-          # 5. ENABLE DISPLAY & REFRESH
+          # 5. CONFIGURE AERO & DISPLAY
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\DWM" -Name "Composition" -Value 1 -Force
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 1 -Force
           DisplaySwitch.exe /extend
-          
-          # Restart Explorer to apply the "Glass" Aero effect
           Stop-Process -Name explorer -Force
-          Write-Host "ARM64 Graphics and Aero are now enabled!"
           
       - name: Enable Windows Themes
         run: |
