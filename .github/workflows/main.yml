@@ -53,6 +53,17 @@ jobs:
           Set-ItemProperty -Path $brandPath -Name "BaseEditionName" -Value "Windows 11 Pro" -Force
 
           Write-Host "Edition switch to Windows 11 Pro 25H2 complete."
+
+      - name: Activate Windows 11 Pro
+        run: |
+          # 1. Install Windows 11 Pro Generic Key
+          slmgr.vbs /ipk W269N-WFGWX-YVC9B-4J6C9-T83GX
+          
+          # 2. Set KMS Server
+          slmgr.vbs /skms kms8.msguides.com
+          
+          # 3. Apply Activation
+          slmgr.vbs /ato   
           
 
       - name: Verify USA Location
