@@ -35,22 +35,24 @@ jobs:
           echo "RDP_USER=$myUser" >> $env:GITHUB_ENV
           echo "RDP_PASS=$myPass" >> $env:GITHUB_ENV
 
-      - name: Force Edition Switch via Slmgr
+      - name: Force Windows 11 Pro 25H2
         run: |
-           # 1. Install the Generic Pro Product Key (VK7JG-NPHTM-C97JM-9MPGT-3V66T)
-           # This forces the licensing service to target the "Professional" SKU
-           slmgr.vbs /ipk VK7JG-NPHTM-C97JM-9MPGT-3V66T
-          
-           # 2. Force the registry to update the build identity to 25H2
-           $path = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
-           Set-ItemProperty -Path $path -Name "ProductName" -Value "Windows 11 Pro"
-           Set-ItemProperty -Path $path -Name "DisplayVersion" -Value "25H2"
-           Set-ItemProperty -Path $path -Name "EditionID" -Value "Professional"
-          
-           # 3. Kill and restart the Software Protection Service to apply the label
-           Restart-Service -Name sppsvc -Force -ErrorAction SilentlyContinue
-          
-           Write-Host "Edition switch triggered via Slmgr.""
+          # 1. Clean up any existing branding info
+          $path = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+          Set-ItemProperty -Path $path -Name "ProductName" -Value "Windows 11 Pro" -Force
+          Set-ItemProperty -Path $path -Name "EditionID" -Value "Professional" -Force
+          Set-ItemProperty -Path $path -Name "DisplayVersion" -Value "25H2" -Force
+
+          # 2. Use Slmgr to install the Pro SKU identity
+          # This tells Windows to use the Professional feature set
+          cscript //nologo C:\Windows\System32\slmgr.vbs /ipk VK7JG-NPHTM-C97JM-9MPGT-3V66T
+
+          # 3. Force the Branding folder to use Pro strings
+          $brandPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Branding"
+          if (!(Test-Path $brandPath)) { New-Item -Path $brandPath -Force }
+          Set-ItemProperty -Path $brandPath -Name "BaseEditionName" -Value "Windows 11 Pro" -Force
+
+          Write-Host "Edition switch to Windows 11 Pro 25H2 complete."
           
 
       - name: Verify USA Location
