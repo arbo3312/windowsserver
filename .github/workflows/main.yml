@@ -80,47 +80,47 @@ jobs:
           $tsIP = & $tsExe ip -4
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
-      - name: 1. Fix Firewall & Auto-Login
+      - name: 1. Setup Auto-Login & Mac-Friendly Security
         run: |
+          # CHANGE THESE TO YOUR CHOSEN NAME AND PASSWORD
           $myUser = "acorole323"
           $myPass = "A$@sW12Sssw4@ws"
           
-          # Force Firewall to allow RDP on ALL profiles (Public, Private, Domain)
-          # This is the most common fix for 0x204
-          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
-          netsh advfirewall firewall add rule name="Allow RDP" dir=in action=allow protocol=TCP localport=3389
+          # Force SecurityLayer to 1 (RDP Security) and Disable NLA (Fixes 0x204 for Mac)
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 1
           
           # Setup Auto-Login Registry
           $winlogon = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
           Set-ItemProperty -Path $winlogon -Name "AutoAdminLogon" -Value "1"
           Set-ItemProperty -Path $winlogon -Name "DefaultUserName" -Value $user
           Set-ItemProperty -Path $winlogon -Name "DefaultPassword" -Value $pass
-          Write-Host "Firewall and Auto-login are now open."
 
-      - name: 2. Disable Runner & Protect Network
+      - name: 2. Firewall & Account Takeover
         run: |
-          # Set Tailscale to stay alive even after runner logs out
-          Set-Service -Name "tailscale" -StartupType Automatic
+          # Force Firewall to allow RDP on all network profiles
+          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
           
-          # Lock out the GitHub runner account (random name)
+          # Identify and DISABLE the GitHub runner account
           $runnerAccount = Get-LocalUser | Where-Object { $_.Name -like "*runner*" }
           if ($runnerAccount) {
               Disable-LocalUser -Name $runnerAccount.Name -ErrorAction SilentlyContinue
           }
 
-      - name: 3. Final Takeover (Delayed for Success)
+      - name: 3. Final Service Reset (No-Stuck Version)
         run: |
-          # Allow immediate takeover
+          # Allow immediate RDP takeover
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fSingleSessionPerUser" -Value 1 -Force          
           
-          # Find the runner's session ID
-          $runnerID = (qwinsta | Where-Object { $_ -match "runner" } | ForEach-Object { ($_.Trim() -split "\s+")[2] })
+          # Restart RDP Service to apply Mac-friendly settings immediately
+          Restart-Service -Name TermService -Force
           
+          # Find runner session and schedule logoff with 15s delay
+          $runnerID = (qwinsta | Where-Object { $_ -match "runner" } | ForEach-Object { ($_.Trim() -split "\s+")[2] })
           if ($runnerID -match '^\d+$') {
-            Write-Host "Success! Closing runner in 15 seconds. Connect now."
-            # 15s delay ensures GitHub saves the 'Success' state before RDP kicks in
             Start-Process cmd.exe -ArgumentList "/c timeout 15 && logoff $runnerID" -WindowStyle Hidden
           }
+          Write-Host "Success! Connect from your Mac now."
 
       - name: Maintain Session
         run: |
